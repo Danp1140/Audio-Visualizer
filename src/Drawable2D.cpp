@@ -5,10 +5,6 @@ Drawable2D::Drawable2D(){
 	scale=glm::vec2(1, 1);
 	thickness=2;
 	rotation=0.0;
-	vertices.push_back(glm::vec2(0, 0));
-	vertices.push_back(glm::vec2(800, 600));
-	color.push_back(glm::vec4(1, 1, 1, 1));
-	color.push_back(glm::vec4(1, 1, 1, 1));
 	mode=LINES;
 }
 Drawable2D::Drawable2D(std::vector<glm::vec2> v)
@@ -24,20 +20,13 @@ Drawable2D::Drawable2D(std::vector<glm::vec2> v)
 
 
 void Drawable2D::draw(GLuint shader){
-	//FACTOR IN ROTATION
 	//optimize?
 
-
-//	std::cout<<"HERE";
 	glUseProgram(shader);
 
-//	GLint colorID=glGetUniformLocation(shader, "colorIn");
-//	glUniform3fv(colorID, 1, &color[0]);
 	std::vector<glm::vec2> tris;
 	std::vector<glm::vec4> tricols;
-	if(mode==LINES){
-//		std::cout<<"hereline";
-//		std::cout<<"verts: "<<vertices.size()<<" colors: "<<color.size()<<std::endl;
+	if(mode==LINES&&vertices.size()>0){
 		tris.push_back(vertices.at(0));
 		tricols.push_back(color.at(0));
 		for(int x=1;x<vertices.size()-1;x++){
@@ -48,10 +37,8 @@ void Drawable2D::draw(GLuint shader){
 		}
 		tris.push_back(vertices.at(vertices.size()-1));
 		tricols.push_back(color.at(color.size()-1));
-//		std::cout<<"herelineend";
 	}
 	else if(mode==FILL){
-//		std::cout<<"herefill";
 		for(int x=0;x<vertices.size()-1;x++){
 			tris.push_back(vertices.at(x));
 			tricols.push_back(color.at(x));
@@ -69,9 +56,7 @@ void Drawable2D::draw(GLuint shader){
 		}
 	}
 	else if(mode==POINTS){
-//		std::cout<<"herepoint";
 		for(int x=0;x<vertices.size();x++){
-//			std::cout<<v.x<<"   "<<v.y<<std::endl;
 			tris.push_back(vertices.at(x)+glm::vec2(10, -10));
 			tris.push_back(vertices.at(x)+glm::vec2(-10, -10));
 			tris.push_back(vertices.at(x)+glm::vec2(0, 10));
@@ -80,21 +65,20 @@ void Drawable2D::draw(GLuint shader){
 			tricols.push_back(color.at(x));
 			tricols.push_back(color.at(x));
 		}
-//		std::cout<<tris.size()<<std::endl;
 	}
-	else if(mode==SPECIAL){
+	else if(mode==SPECIAL&&vertices.size()>0){
 		for(int x=0;x<vertices.size()-1;x++){
 			tris.push_back(vertices.at(x));
 			tris.push_back(vertices.at(x+1));
-			tris.push_back(vertices.at(x)+glm::vec2(0, 10));
+			tris.push_back(vertices.at(x)+glm::vec2(0, 20));
 
 			tricols.push_back(color.at(x));
 			tricols.push_back(color.at(x+1));
 			tricols.push_back(color.at(x));
 
 			tris.push_back(vertices.at(x+1));
-			tris.push_back(vertices.at(x)+glm::vec2(0, 10));
-			tris.push_back(vertices.at(x+1)+glm::vec2(0, 10));
+			tris.push_back(vertices.at(x)+glm::vec2(0, 20));
+			tris.push_back(vertices.at(x+1)+glm::vec2(0, 20));
 
 			tricols.push_back(color.at(x+1));
 			tricols.push_back(color.at(x));
@@ -102,16 +86,19 @@ void Drawable2D::draw(GLuint shader){
 		}
 	}
 	else{tris=vertices;tricols=color;}
-//	std::cout<<"hErE";
 
 
-	std::vector<glm::vec2> oldverts=tris, newverts;
-	glm::vec2 temp;
-	for(auto&v:oldverts){
-		temp=glm::vec2(atan2(v.y-position.y, v.x-position.x)+rotation, sqrt(pow(v.x-position.x, 2)+pow(v.y-position.y, 2)));
-		newverts.push_back(glm::vec2(temp.y*cos(temp.x), temp.y*sin(temp.x)));
+	//solve rotation system (drawable 3 seems to rely on it????)
+	if(mode==SPECIAL){
+		std::vector<glm::vec2> oldverts=tris, newverts;
+		glm::vec2 temp;
+		for(auto&v:oldverts){
+			temp=glm::vec2(atan2(v.y-position.y, v.x-position.x)+rotation,
+			               sqrt(pow(v.x-position.x, 2)+pow(v.y-position.y, 2)));
+			newverts.push_back(glm::vec2(temp.y*cos(temp.x), temp.y*sin(temp.x)));
+		}
+		tris=newverts;
 	}
-	tris=newverts;
 
 	for(auto& v:tris){v*=scale;v+=position;}
 
@@ -138,47 +125,112 @@ void Drawable2D::draw(GLuint shader){
 
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
+
+	glDeleteBuffers(1, &vb);
+	glDeleteBuffers(1, &cb);
 }
 
 std::vector<glm::vec2> Drawable2D::wrapPolar(std::vector<glm::vec2> oldverts, int rate){
 	std::vector<glm::vec2> newverts;
-	//polar in form (theta, r)
 	float theta;
-	for(int x=0;x<oldverts.size();x++){
+	int x;
+	for(x=0;x<oldverts.size();x++){
 		theta=oldverts.at(x).x*6.28/rate;
-//		theta=oldverts.at(x).x*6.28/rate-1.57;
 		newverts.push_back(glm::vec2(oldverts.at(x).y*cos(theta), oldverts.at(x).y*sin(theta)));
 	}
 	return newverts;
 }
 
-void Drawable2D::fourierTest(){
+void Drawable2D::fourierTest(int width, int step){
 	//changes here should be accounted for in findPeaks()
 	std::vector<glm::vec2> oldverts=vertices, polarverts, newverts;
-	float avg;
-	for(int y=20;y<2000;y+=10){
+	float avg, y;
+	int x;
+//	for(y=20;y<2000;y*=(pow(2, 1.0/12.0))){
+	for(y=0;y<width+step;y+=step){
 		//tries frequencies from 20 Hz to 2 kHz
 		//one frequency->one vertex
 		avg=0.0;
 		polarverts=wrapPolar(oldverts, 2.90189/(0.0000328642*y));
-//		polarverts=wrapPolar(oldverts, y);
-		for(int x=0;x<polarverts.size();x++){//lowering resolution has little to no effect on efficiency
+		for(x=0;x<polarverts.size();x++){//lowering resolution has little to no effect on efficiency
 			avg+=polarverts.at(x).x;
 			avg+=polarverts.at(x).y;
 		}
 		avg/=polarverts.size();
-//		avg*=sqrt(y*10)/50;
-		newverts.push_back(glm::vec2(y, abs(avg)*10));
-		color.push_back(glm::vec4(0, float(y)/1440, 1-float(y)/1440, 1));
-//		color.push_back(glm::vec4(1, 1, 1, 1));
-//		color.push_back(glm::vec4(1, 1, 1, y/1440));
-//		color.push_back(glm::vec3(avg/10, avg/10, 1));
-//		color.push_back(glm::vec3(1, 1, 1));
+		newverts.push_back(glm::vec2(y, abs(avg)*10*sqrt(y/200.0)));
+		color.push_back(glm::vec4(0, float(y)/width, 1-float(y)/width, 1));
 	}
-//	std::cout<<"old: "<<vertices.size()<<" new: "<<newverts.size()<<std::endl;
 	vertices=newverts;
-	this->setScale(glm::vec2(0.4, 0.5));
-	//5000->0.165
+}
+
+void Drawable2D::DFT(float low, float high, float resolution, Drawable2D profile){
+	//balance down bass a bit, up mids a bit
+	std::vector<glm::vec2> newVertices;
+	float t=1.0/vertices.size(), n=vertices.size();
+	int k=0;
+	bool p=profile.getVertices().size()>1;
+	std::complex<float> sum, ti=std::complex<float>(t, 0.0)*std::complex<float>(0.0, -1.0);
+	for(float freq=low; freq<high; freq*=pow(2, 1.0/(12.0*resolution))){
+		sum=std::complex<float>(0.0, 0.0);
+		for(k=0; k<n; k++){
+			//below operation takes significant processing power (its not all just the for loops and if statements)
+			sum+=std::complex<float>(vertices[k].x, vertices[k].y*10)*exp(ti*freq*(float)k);
+		}
+		//move if outside of for?
+		//average real and imaginary?
+		if(p){
+//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (abs(abs((sum.real()/1000))-abs(profile.getVertices().at(newVertices.size()).y)))));
+			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs((sum.real()/1000+sum.imag()/1000)/2-profile.getVertices().at(newVertices.size()).y)));
+			color.push_back(glm::vec4(0, freq/high, (high-freq)/high, 1));
+		}
+		else{
+//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs(sum.real()/1000)));
+			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (sum.real()/1000+sum.imag()/1000)/2));
+			color.push_back(glm::vec4(1, 1, 1, 1));
+		}
+	}
+	vertices=newVertices;
+}
+
+void Drawable2D::FFT(float low, float high, float resolution, Drawable2D profile){
+	//balance down bass a bit, up mids a bit
+	std::vector<glm::vec2> newVertices;
+	float t=1.0f/vertices.size(), n=vertices.size();
+	//t causing real range issues?
+	int k=0;
+	bool p=profile.getVertices().size()>1;
+	std::complex<float> a, sum, temp;
+	for(float freq=low; freq<high; freq*=pow(2, 1.0/(12.0*resolution))){
+		sum=std::complex<float>(0.0f, 0.0f);
+		a=std::complex<float>(cos(-3.14*freq*t), sin(-3.14*freq*t));
+		//entire new method actually <harmed> speed
+		temp=std::complex<float>(1.0f, 0.0f);
+		for(k=0; k<n; k++){
+			sum+=std::complex<float>(vertices[k].x, vertices[k].y*10.0f)*temp;
+			temp*=a;
+		}
+		//move if outside of for?
+		//average real and imaginary? how does this affect speed?
+		if(p){
+//	        system here really could be optimized
+//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (abs(abs((sum.real()/1000))-abs(profile.getVertices().at(newVertices.size()).y)))));
+			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs((sum.real()/1000.0f+sum.imag()/1000.0f)/2-profile.getVertices().at(newVertices.size()).y)));
+//			newVertices.push_back(glm::vec2(freq, abs((sum.real()/1000.0f+sum.imag()/1000.0f)/2-profile.getVertices().at(newVertices.size()).y)));
+//			std::cout<<newVertices.at(newVertices.size()-1).x<<' '<<newVertices.at(newVertices.size()-1).y<<'i'<<std::endl;
+			color.push_back(glm::vec4(0, freq/high, (high-freq)/high, 1));
+		}
+		else{
+//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs(sum.real()/1000)));
+			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (sum.real()/1000.0f+sum.imag()/1000.0f)/2));
+//			newVertices.push_back(glm::vec2(freq, (sum.real()/1000.0f+sum.imag()/1000.0f)/2));
+			color.push_back(glm::vec4(1, 1, 1, 1));
+		}
+	}
+	vertices=newVertices;
+}
+
+std::complex<float> Drawable2D::W(float t, float k, float omega){
+	return exp(std::complex<float>(0.0f, -t*k*omega));
 }
 
 std::vector<glm::vec2> Drawable2D::findPeaks(){
@@ -186,13 +238,6 @@ std::vector<glm::vec2> Drawable2D::findPeaks(){
 	float max;
 	//really 20.60
 	for(float x=20;x<2000;x*=pow(2, 1.0/12.0)){
-//		std::cout<<"   "<<x<<std::endl;
-//		std::cout<<x<<std::endl;
-//		max=0.0;
-//		for(int y=0;y<x;y++){
-////			if(vertices.at(y).y>max){max=vertices.at(y).y;}
-//		}
-//		std::cout<<(x-20)/5<<std::endl;
 		for(float y=x;y<x*pow(2, 1.0/12.0);y++){
 //			std::cout<<y<<std::endl;
 			if(y<vertices.size()&&vertices.at(y).y>200.0){result.push_back(vertices.at(y)*glm::vec2(0.8, 1));}

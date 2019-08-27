@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <iostream>
+#include <complex>
 
 #include <GL/glew.h>
 #include <glm/gtx/vector_angle.hpp>
@@ -18,7 +19,6 @@ private:
 	std::vector<glm::vec2> vertices;
 	std::vector<glm::vec4> color;
 	glm::vec2 position, scale;
-//	glm::vec3 color;
 	int thickness, mode;
 	float rotation;
 	GLuint vertexbuffer, colorbuffer;
@@ -29,16 +29,21 @@ public:
 
 	void draw(GLuint shader);
 	std::vector<glm::vec2> wrapPolar(std::vector<glm::vec2> oldverts, int rate);
-	void fourierTest();
+	void fourierTest(int width, int step);
+	void DFT(float low, float high, float resolution, Drawable2D profile);
+	void FFT(float low, float high, float resolution, Drawable2D profile);
+	std::complex<float> W(float t, float k, float omega);
 	void refreshColor(){color=std::vector<glm::vec4>();}
 	std::vector<glm::vec2> findPeaks();
 
 	void addVertex(glm::vec2 v){vertices.push_back(v);}
+	void eraseVertex(int index){vertices.erase(vertices.begin()+index-1);}
 	void addColor(glm::vec4 c){color.push_back(c);}
 
 	void setVertices(std::vector<glm::vec2> v){vertices=v;}
 	void setColor(std::vector<glm::vec4> c){color=c;}
 	void setColorAt(int index, glm::vec4 c){color.at(index)=c;}
+	void eraseColor(int index){color.erase(color.begin()+index-1);}
 	void setPosition(glm::vec2 p){position=p;}
 	void setScale(glm::vec2 s){scale=s;}
 	void setThickness(int t){thickness=t;}
