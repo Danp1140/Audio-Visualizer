@@ -1,6 +1,7 @@
 #include <iostream>
 #include <complex>
 #include <chrono>
+#include <queue>
 
 #include <PortAudio/portaudio.h>
 
@@ -78,14 +79,11 @@ int main(){
 		return -1;
 	}
 	glfwWindowHint(GLFW_SAMPLES, 4);
+	//above can be increased to 8, with fps drop of ~5
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-//	glfwWindowHint(GLFW_STEREO, GLFW_TRUE);
-
-//	glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-
 //	const GLFWvidmode*mode=glfwGetVideoMode(glfwGetPrimaryMonitor());
 	GLFWwindow*window=glfwCreateWindow(1440, 900, "Audio Visualizer", nullptr,
 	                                   nullptr);
@@ -111,24 +109,22 @@ int main(){
 	std::cout<<Pa_GetVersionInfo()->versionText<<'\n';
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable( GL_BLEND );
-//	_________________________________________________________________
+
+
+
 	int deviceindex;
-	std::cout<<"Choose which input device to use (return the corresponding interger. Ensure the device is input, not output)"<<std::endl;
+	std::cout<<"Choose which input device to use (return the corresponding integer. Ensure the device is input, not output)"<<std::endl;
 	for(int x=0;x<Pa_GetDeviceCount();x++){
 		std::cout<<x<<": "<<Pa_GetDeviceInfo(x)->name<<std::endl;
 	}
 	std::cin>>deviceindex;
 
-
-	//try using functioning output device as input
-
-
 	paTestData data;
 	PaStream*stream;
 	PaStreamParameters inputParameters;
-//	inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
-	inputParameters.device = deviceindex; /* default input device */
-	inputParameters.channelCount = 2;                    /* stereo input */
+//	inputParameters.device = Pa_GetDefaultInputDevice();
+	inputParameters.device = deviceindex;
+	inputParameters.channelCount = 2;
 	inputParameters.sampleFormat = paFloat32;
 	inputParameters.suggestedLatency = Pa_GetDeviceInfo( inputParameters.device )->defaultLowInputLatency;
 	inputParameters.hostApiSpecificStreamInfo = nullptr;
@@ -142,9 +138,7 @@ int main(){
 //	data.recordedSamples = (SAMPLE*) malloc(sizeof(SAMPLE)*NUM_CHANNELS*SAMPLE_RATE*5);
 	data.recordedSamples=(SAMPLE*) malloc(sizeof(SAMPLE)*NUM_CHANNELS*FRAMES_PER_BUFFER);
 
-//	Pa_OpenDefaultStream(&stream, 0, 2, paFloat32, SAMPLE_RATE, 1024, paCallback, &data);
 	Pa_OpenStream(&stream, &inputParameters, nullptr, SAMPLE_RATE, FRAMES_PER_BUFFER, paClipOff, recordCallbackExperimental, &data);
-//	Pa_OpenStream(&stream, &inputParameters, nullptr, SAMPLE_RATE, 1024, paClipOff, nullptr, nullptr);
 	Pa_StartStream(stream);
 
 
@@ -161,10 +155,9 @@ int main(){
 	v->getFlat(1)->setScale(glm::vec2(0.5, 0.5));
 	v->getFlat(1)->setPosition(glm::vec2(0, 300));
 	v->getFlat(3)->setScale(glm::vec2(1.0, 0.5));
-//	v->getFlat(3)->setPosition(glm::vec2(0, 600));
-	v->getFlat(3)->setPosition(glm::vec2(0, 600));
-//	v->getFlat(4)->setScale(glm::vec2(1.0/23.8, 1.0/100000.0));
-	v->getFlat(4)->setScale(glm::vec2(1.0/25.0, 1.0/100000.0));
+	v->getFlat(3)->setPosition(glm::vec2(0, 700));
+	v->getFlat(4)->setScale(glm::vec2(1.0/20.0, 1.0/5.0));
+//	v->getFlat(4)->setScale(glm::vec2(1.0/23.0, 1.0));
 	v->getFlat(4)->setPosition(glm::vec2(0, 200));
 
 	v->getFlat(1)->setMode(POINTS);
@@ -173,25 +166,67 @@ int main(){
 
 	glClearColor(0.1, 0.1, 0.1, 1.0);
 
-	float t=0, tl=0, frames=0, gainMax;
+	float t=0, tl=0, frames=0, gainMax, low=20.0, high=2000.0, res=1.0;
 
 	GLuint flatsShader=Viewport::loadShaders("../resources/shaders/2DVertShader.glsl", "../resources/shaders/2DFragShader.glsl");
 
-
-
 	//temporary measure has been taken to reduce lag, by ignoring three of every four
+	//i dont even know how much i'm ignoring anymore, its fine, everything's fine
 
 
 
 	std::vector<glm::vec2> blank;
 	for(int x=0;x<NUM_CHANNELS*FRAMES_PER_BUFFER;x+=NUM_CHANNELS*FRAMES_PER_BUFFER/width*8){blank.push_back(glm::vec2(x, 0.0));}
-	Drawable2D fourierProfile=Drawable2D(blank);
-//	fourierProfile.DFT(20.0, 20000.0, 1.0, Drawable2D(std::vector<glm::vec2>{glm::vec2(0, 0)}));
-	fourierProfile.FFT(20.0, 20000.0, 1.0, Drawable2D(std::vector<glm::vec2>{glm::vec2(0, 0)}));
+	std::cout<<blank.size()<<std::endl;
 
-	int gridSize=fourierProfile.getVertices().size()*((height-(v->getFlat(3)->getPosition().y*v->getFlat(3)->getScale().y))/20);
+	int n=blank.size(), counter=0;
+	std::complex<float> w=exp(std::complex<float>(6.28/(float)n, -1.0f));
+	std::complex<float> ws[n];
+	std::complex<float> matrixtemp[n][n];
+	std::vector<std::vector<std::complex<float>>> matrix;
+
+//	std::cout<<w<<std::endl;
+
+	for(int x=0;x<n;x++){
+		ws[x]=pow(w, x);
+//		std::cout<<ws[x]<<std::endl;
+	}
+
+	for(int x=0;x<n;x++){
+		std::cout<<" | ";
+		counter=0;
+		for(int y=0;y<n;y++){
+			matrixtemp[x][y]=ws[counter];
+			counter+=x;
+			if(counter>=n){counter-=n;}
+			std::cout<<(int)matrixtemp[x][y].real()<<"+"<<(int)matrixtemp[x][y].imag()<<"i, ";
+		}
+		std::cout<<" | "<<blank[x].y<<std::endl;
+	}
+	std::vector<std::complex<float>> loadtemp=std::vector<std::complex<float>>();
+	for(int x=0;x<n;x++){
+		matrix.push_back(loadtemp);
+		for(int y=0;y<n;y++){
+			matrix[x].push_back(matrixtemp[x][y]);
+		}
+	}
+
+	Drawable2D fourierProfile=Drawable2D(blank);
+//	fourierProfile.DFT(low, high, res, Drawable2D(std::vector<glm::vec2>{glm::vec2(0, 0)}));
+
+	std::cout<<fourierProfile.getVertices().size()<<std::endl;
+	int gridSize=std::ceil(2.0*fourierProfile.getVertices().size()*ceil((height-v->getFlat(3)->getPosition().y)/20.0));
 	std::vector<glm::vec2> gridTemp=std::vector<glm::vec2>();
 	std::vector<glm::vec4> gridColorTemp=std::vector<glm::vec4>();
+
+//	v->getFlat(4)->setScale(glm::vec2(0.001f, 0.0001f));
+
+	v->getFlat(3)->addVertex(glm::vec2(0, 0));
+	v->getFlat(3)->addVertex(glm::vec2(0, 0));
+	v->getFlat(3)->addVertex(glm::vec2(0, 0));
+	v->getFlat(3)->addColor(glm::vec4(0, 0, 0, 0));
+	v->getFlat(3)->addColor(glm::vec4(0, 0, 0, 0));
+	v->getFlat(3)->addColor(glm::vec4(0, 0, 0, 0));
 
 	do{
 		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -201,37 +236,37 @@ int main(){
 		v->getFlat(4)->setVertices(std::vector<glm::vec2>());
 
 		gainMax=100.0;
-		for(int x=0;x<NUM_CHANNELS*FRAMES_PER_BUFFER;x+=NUM_CHANNELS*FRAMES_PER_BUFFER/width*4){
+		for(int x=0;x<NUM_CHANNELS*FRAMES_PER_BUFFER;x+=NUM_CHANNELS*FRAMES_PER_BUFFER/width*8){
 			v->getFlat(0)->addVertex(glm::vec2(x, data.recordedSamples[x]*GAIN));
-			v->getFlat(0)->addColor(glm::vec4(float(x)/width, 0.2, 1-float(x)/width, 1));
+			v->getFlat(0)->addColor(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
 			v->getFlat(4)->addVertex(glm::vec2(x, data.recordedSamples[x]*GAIN*2));
 			if(data.recordedSamples[x]*GAIN>gainMax){gainMax=data.recordedSamples[x]*GAIN;}
 		}
 
 		if(gainMax>100.0){
 			v->getFlat(0)->setScale(glm::vec2(v->getFlat(0)->getScale().x, 100.0/gainMax));
-			v->getFlat(4)->setScale(glm::vec2(v->getFlat(4)->getScale().x, 100.0/gainMax));
+//			v->getFlat(4)->setScale(glm::vec2(v->getFlat(4)->getScale().x, 100.0/gainMax));
 		}
 
-//		v->getFlat(4)->DFT(20.0, 20000.0, 1.0, fourierProfile);
-		v->getFlat(4)->FFT(20.0, 20000.0, 1.0, fourierProfile);
+//		v->getFlat(4)->FFT(matrix, fourierProfile);
+		v->getFlat(4)->DFT(low, high, res, fourierProfile);
+//		v->getFlat(4)->DFT2(fourierProfile, ws);
 
-		gridTemp=v->getFlat(3)->getVertices();
-		gridColorTemp=v->getFlat(3)->getColor();
-		for(auto&vert:v->getFlat(4)->getVertices()){
-			gridTemp.push_back(glm::vec2(vert.x*v->getFlat(4)->getScale().x, 0));
-			gridColorTemp.push_back(glm::vec4(1, 1, 1, vert.y/1500.0));
-		}
-		for(int x=0;x<gridTemp.size();x++){
-			gridTemp.at(x).y+=20.0;
-		}
-//		if(v->getFlat(3)->getVertices().size()>3600){
-		if(v->getFlat(3)->getVertices().size()>3012){
-			gridTemp.erase(gridTemp.begin(), gridTemp.begin()+fourierProfile.getVertices().size());
-			gridColorTemp.erase(gridColorTemp.begin(), gridColorTemp.begin()+fourierProfile.getVertices().size());
-		}
-		v->getFlat(3)->setVertices(gridTemp);
-		v->getFlat(3)->setColor(gridColorTemp);
+//		gridTemp=v->getFlat(3)->getVertices();
+//		gridColorTemp=v->getFlat(3)->getColor();
+//		for(int x=0;x<v->getFlat(4)->getVertices().size();x+=2){
+//			gridTemp.push_back(glm::vec2(v->getFlat(4)->getVertices().at(x).x*v->getFlat(4)->getScale().x, 0));
+//			gridColorTemp.push_back(glm::vec4(1, 1, 1, v->getFlat(4)->getVertices().at(x).y/1500.0-0.05f));
+//		}
+//		for(int x=0;x<gridTemp.size();x++){
+//			gridTemp.at(x).y+=20.0;
+//		}
+//		if(v->getFlat(3)->getVertices().size()>gridSize){
+//			gridTemp.erase(gridTemp.begin(), gridTemp.begin()+fourierProfile.getVertices().size());
+//			gridColorTemp.erase(gridColorTemp.begin(), gridColorTemp.begin()+fourierProfile.getVertices().size());
+//		}
+//		v->getFlat(3)->setVertices(gridTemp);
+//		v->getFlat(3)->setColor(gridColorTemp);
 
 		v->drawFlats(flatsShader);
 
@@ -240,8 +275,8 @@ int main(){
 
 		tl=t;
 		frames++;
+		//this isn't actually a proper fps counter (cumulative, that's why beginning is a climb)
 		if(t!=0){std::cout<<frames/t<<" fps"<<std::endl;}
-
 	}while(!glfwWindowShouldClose(window)&&glfwGetKey(window, GLFW_KEY_ESCAPE)!=GLFW_PRESS);
 
 

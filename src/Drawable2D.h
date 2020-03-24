@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <iostream>
+#include <iomanip>
 #include <complex>
 
 #include <GL/glew.h>
@@ -31,7 +32,8 @@ public:
 	std::vector<glm::vec2> wrapPolar(std::vector<glm::vec2> oldverts, int rate);
 	void fourierTest(int width, int step);
 	void DFT(float low, float high, float resolution, Drawable2D profile);
-	void FFT(float low, float high, float resolution, Drawable2D profile);
+	void DFT2(Drawable2D profile, std::complex<float> ws[]);
+	void FFT(std::vector<std::vector<std::complex<float>>> matrix, Drawable2D profile);
 	std::complex<float> W(float t, float k, float omega);
 	void refreshColor(){color=std::vector<glm::vec4>();}
 	std::vector<glm::vec2> findPeaks();

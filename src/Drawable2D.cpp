@@ -99,7 +99,6 @@ void Drawable2D::draw(GLuint shader){
 		}
 		tris=newverts;
 	}
-
 	for(auto& v:tris){v*=scale;v+=position;}
 
 	GLuint vb;
@@ -112,20 +111,16 @@ void Drawable2D::draw(GLuint shader){
 	colorbuffer=cb;
 	glBindBuffer(GL_ARRAY_BUFFER, colorbuffer);
 	glBufferData(GL_ARRAY_BUFFER, tricols.size()*sizeof(glm::vec4), &tricols[0], GL_STATIC_DRAW);
-
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, colorbuffer);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, nullptr);
-
 	if(mode==LINES){glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(tris.size()));}
 	if(mode==TRIANGLES||mode==FILL||mode==POINTS||mode==SPECIAL){glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(tris.size()));}
-
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
-
 	glDeleteBuffers(1, &vb);
 	glDeleteBuffers(1, &cb);
 }
@@ -166,67 +161,62 @@ void Drawable2D::fourierTest(int width, int step){
 void Drawable2D::DFT(float low, float high, float resolution, Drawable2D profile){
 	//balance down bass a bit, up mids a bit
 	std::vector<glm::vec2> newVertices;
-	float t=1.0/vertices.size(), n=vertices.size();
+	float t=1.0f/vertices.size(), n=vertices.size();
 	int k=0;
 	bool p=profile.getVertices().size()>1;
 	std::complex<float> sum, ti=std::complex<float>(t, 0.0)*std::complex<float>(0.0, -1.0);
 	for(float freq=low; freq<high; freq*=pow(2, 1.0/(12.0*resolution))){
 		sum=std::complex<float>(0.0, 0.0);
 		for(k=0; k<n; k++){
-			//below operation takes significant processing power (its not all just the for loops and if statements)
 			sum+=std::complex<float>(vertices[k].x, vertices[k].y*10)*exp(ti*freq*(float)k);
 		}
 		//move if outside of for?
 		//average real and imaginary?
 		if(p){
-//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (abs(abs((sum.real()/1000))-abs(profile.getVertices().at(newVertices.size()).y)))));
 			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs((sum.real()/1000+sum.imag()/1000)/2-profile.getVertices().at(newVertices.size()).y)));
-			color.push_back(glm::vec4(0, freq/high, (high-freq)/high, 1));
+//			std::cout<<newVertices[newVertices.size()-1].y<<std::endl;
+//			newVertices.push_back(glm::vec2((log(freq)/log(low*pow(2.0, 1.0/(12.0*resolution))))*1920, abs((sum.real()/1000+sum.imag()/1000)/2-profile.getVertices().at(newVertices.size()).y)));
+//			color.push_back(glm::vec4(0, freq/high, (high-freq)/high, 1));
+			if(freq<450&&freq>350){color.push_back(glm::vec4(1, 0, 0, 1));}
+			else{color.push_back(glm::vec4(1, 1, 1, 1));}
+
 		}
 		else{
-//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs(sum.real()/1000)));
 			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (sum.real()/1000+sum.imag()/1000)/2));
+//			newVertices.push_back(glm::vec2((log(freq)/log(low*pow(2.0, 1.0/(12.0*resolution))))*1920, (sum.real()/1000+sum.imag()/1000)/2));
 			color.push_back(glm::vec4(1, 1, 1, 1));
 		}
 	}
 	vertices=newVertices;
 }
 
-void Drawable2D::FFT(float low, float high, float resolution, Drawable2D profile){
-	//balance down bass a bit, up mids a bit
-	std::vector<glm::vec2> newVertices;
-	float t=1.0f/vertices.size(), n=vertices.size();
-	//t causing real range issues?
-	int k=0;
-	bool p=profile.getVertices().size()>1;
-	std::complex<float> a, sum, temp;
-	for(float freq=low; freq<high; freq*=pow(2, 1.0/(12.0*resolution))){
+//dft2 treats frequencies realistically, and possibly optimizes with array of W's with varying power
+
+void Drawable2D::DFT2(Drawable2D profile, std::complex<float> ws[]){
+	int n=sizeof(ws)/sizeof(std::complex<float>), k;
+	std::complex<float> sum;
+	for(int freq=0;freq<n;freq++){
 		sum=std::complex<float>(0.0f, 0.0f);
-		a=std::complex<float>(cos(-3.14*freq*t), sin(-3.14*freq*t));
-		//entire new method actually <harmed> speed
-		temp=std::complex<float>(1.0f, 0.0f);
-		for(k=0; k<n; k++){
-			sum+=std::complex<float>(vertices[k].x, vertices[k].y*10.0f)*temp;
-			temp*=a;
+		for(k=0;k<n;k++){
+			sum+=std::complex<float>(vertices[k].x, vertices[k].y)*ws[freq*k];
 		}
-		//move if outside of for?
-		//average real and imaginary? how does this affect speed?
-		if(p){
-//	        system here really could be optimized
-//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (abs(abs((sum.real()/1000))-abs(profile.getVertices().at(newVertices.size()).y)))));
-			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs((sum.real()/1000.0f+sum.imag()/1000.0f)/2-profile.getVertices().at(newVertices.size()).y)));
-//			newVertices.push_back(glm::vec2(freq, abs((sum.real()/1000.0f+sum.imag()/1000.0f)/2-profile.getVertices().at(newVertices.size()).y)));
-//			std::cout<<newVertices.at(newVertices.size()-1).x<<' '<<newVertices.at(newVertices.size()-1).y<<'i'<<std::endl;
-			color.push_back(glm::vec4(0, freq/high, (high-freq)/high, 1));
-		}
-		else{
-//			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, abs(sum.real()/1000)));
-			newVertices.push_back(glm::vec2((log(freq/low)/log(2))*1920, (sum.real()/1000.0f+sum.imag()/1000.0f)/2));
-//			newVertices.push_back(glm::vec2(freq, (sum.real()/1000.0f+sum.imag()/1000.0f)/2));
-			color.push_back(glm::vec4(1, 1, 1, 1));
-		}
+		std::cout<<sum<<std::endl;
 	}
-	vertices=newVertices;
+}
+
+void Drawable2D::FFT(std::vector<std::vector<std::complex<float>>> matrix, Drawable2D profile){
+	std::vector<glm::vec2> newverts;
+	int n=vertices.size();
+	std::complex<float> sum;
+	for(int x=0;x<n;x++){
+		sum=std::complex<float>(0.0f, 0.0f);
+		for(int y=0;y<n;y++){
+			sum+=matrix[x][y]*std::complex<float>(vertices[y].x, vertices[y].y);
+		}
+		newverts.emplace_back(glm::vec2(sum.real(), sum.imag()));
+		color.emplace_back(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+	}
+	vertices=newverts;
 }
 
 std::complex<float> Drawable2D::W(float t, float k, float omega){
